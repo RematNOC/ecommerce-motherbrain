@@ -10,12 +10,14 @@ export default function AdminPortal() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({ title: '', price_cents: '', sku: '' });
+  // Upgraded: We now track price_dollars instead of price_cents in the form
+  const [formData, setFormData] = useState({ title: '', price_dollars: '', sku: '' });
 
   const fetchProducts = async () => {
     setIsLoading(true);
-    const { data } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
     if (data) setProducts(data);
+    if (error) console.error("Fetch error:", error);
     setIsLoading(false);
   };
 
@@ -26,9 +28,13 @@ export default function AdminPortal() {
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     setIsSubmitting(true);
+    
+    // THE MAGIC: Convert the dollar string (e.g. "10.50") into an integer of cents (1050)
+    const centsValue = Math.round(parseFloat(formData.price_dollars) * 100);
+
     const { error } = await supabase.from('products').insert([{
       title: formData.title,
-      price_cents: parseInt(formData.price_cents),
+      price_cents: centsValue,
       sku: formData.sku,
       is_active: true
     }]);
@@ -36,7 +42,7 @@ export default function AdminPortal() {
     setIsSubmitting(false);
     if (!error) {
       setIsModalOpen(false);
-      setFormData({ title: '', price_cents: '', sku: '' });
+      setFormData({ title: '', price_dollars: '', sku: '' });
       fetchProducts();
     } else {
       alert("Database Error: " + error.message);
@@ -48,7 +54,7 @@ export default function AdminPortal() {
       <div className="flex justify-between items-center mb-12">
         <div>
           <h1 className="text-2xl font-bold tracking-tighter uppercase">MotherBrain Portal</h1>
-          <p className="text-white/40 text-xs">V4.0 // Live Supabase Connection</p>
+          <p className="text-white/40 text-xs">V4.1 // Live Uplink // Auto-Math</p>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
@@ -123,7 +129,7 @@ export default function AdminPortal() {
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-lg bg-[#000] border border-white/10 p-8 shadow-2xl">
               <div className="flex justify-between items-center mb-8">
                 <h2 className="text-xl font-bold uppercase tracking-tighter">Add New Product</h2>
-                <button onClick={() => setIsModalOpen(false)} className="text-white/40 hover:text-white"><X size={20} /></button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="text-white/40 hover:text-white"><X size={20} /></button>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
@@ -134,8 +140,8 @@ export default function AdminPortal() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase text-white/40 tracking-widest font-bold">Price (Cents)</label>
-                    <input required value={formData.price_cents} onChange={e => setFormData({...formData, price_cents: e.target.value})} type="number" className="w-full bg-white/[0.03] border border-white/10 px-4 py-3 text-sm focus:outline-none focus:border-white/40" placeholder="e.g. 4500 for $45.00" />
+                    <label className="text-[10px] uppercase text-white/40 tracking-widest font-bold">Price (USD)</label>
+                    <input required step="0.01" min="0" value={formData.price_dollars} onChange={e => setFormData({...formData, price_dollars: e.target.value})} type="number" className="w-full bg-white/[0.03] border border-white/10 px-4 py-3 text-sm focus:outline-none focus:border-white/40" placeholder="e.g. 10.00" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase text-white/40 tracking-widest font-bold">SKU</label>
