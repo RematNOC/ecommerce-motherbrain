@@ -1,14 +1,19 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Package, DollarSign, Activity, Search, Filter, X, Loader2, CheckCircle2, Image as ImageIcon, UploadCloud, LayoutTemplate } from 'lucide-react';
+import { Plus, Package, DollarSign, Activity, Search, Filter, X, Loader2, CheckCircle2, Image as ImageIcon, UploadCloud, LayoutTemplate, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 
 export default function PolarisAdmin() {
-  const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' or 'storefront'
-  
-  // Inventory State
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passcode, setPasscode] = useState('');
+  const [authError, setAuthError] = useState(false);
+  const MASTER_PASSCODE = '0000'; // Change this to your secret PIN
+
+  // Dashboard State
+  const [activeTab, setActiveTab] = useState('inventory');
   const [products, setProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -16,25 +21,30 @@ export default function PolarisAdmin() {
   const [formData, setFormData] = useState({ title: '', price_dollars: '', sku: '' });
   const [imageFile, setImageFile] = useState<File | null>(null);
 
-  // Storefront State
+  // CMS State
   const [settings, setSettings] = useState({ hero_heading: '', hero_subheading: '', hero_image_url: '' });
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-  const fetchData = async () => {
-    setIsLoading(true);
-    // Fetch Products
-    const { data: pData } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-    if (pData) setProducts(pData);
-    
-    // Fetch Settings
-    const { data: sData } = await supabase.from('store_settings').select('*').eq('id', 1).single();
-    if (sData) setSettings(sData);
-    
-    setIsLoading(false);
+  const handleLogin = (e: any) => {
+    e.preventDefault();
+    if (passcode === MASTER_PASSCODE) {
+      setIsAuthenticated(true);
+      fetchData();
+    } else {
+      setAuthError(true);
+      setPasscode('');
+    }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  const fetchData = async () => {
+    setIsLoading(true);
+    const { data: pData } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+    if (pData) setProducts(pData);
+    const { data: sData } = await supabase.from('store_settings').select('*').eq('id', 1).single();
+    if (sData) setSettings(sData);
+    setIsLoading(false);
+  };
 
   const handleProductSubmit = async (e: any) => {
     e.preventDefault();
@@ -61,7 +71,6 @@ export default function PolarisAdmin() {
     e.preventDefault();
     setIsSavingSettings(true);
     let newImageUrl = settings.hero_image_url;
-
     if (bannerFile) {
       const fileExt = bannerFile.name.split('.').pop();
       const fileName = `banner_${Math.random().toString(36).substring(2)}.${fileExt}`;
@@ -70,19 +79,52 @@ export default function PolarisAdmin() {
         newImageUrl = supabase.storage.from('product-images').getPublicUrl(fileName).data.publicUrl;
       }
     }
-
-    await supabase.from('store_settings').update({
-      hero_heading: settings.hero_heading,
-      hero_subheading: settings.hero_subheading,
-      hero_image_url: newImageUrl
-    }).eq('id', 1);
-
+    await supabase.from('store_settings').update({ hero_heading: settings.hero_heading, hero_subheading: settings.hero_subheading, hero_image_url: newImageUrl }).eq('id', 1);
     setSettings({ ...settings, hero_image_url: newImageUrl });
     setBannerFile(null);
     setIsSavingSettings(false);
     alert('Storefront updated successfully!');
   };
 
+  // ------------------------------------------------------------------
+  // 1. THE LOCK SCREEN
+  // ------------------------------------------------------------------
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#1A1C1D] flex flex-col items-center justify-center p-4 font-sans selection:bg-white selection:text-black">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm space-y-8">
+          <div className="text-center space-y-2">
+            <div className="bg-white/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Lock className="text-white w-5 h-5" />
+            </div>
+            <h1 className="text-white text-xl font-medium tracking-widest uppercase">MotherBrain</h1>
+            <p className="text-[#6D7175] text-xs tracking-widest uppercase">Vault Authentication</p>
+          </div>
+          
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <input 
+                type="password" 
+                autoFocus
+                placeholder="ENTER PASSCODE" 
+                value={passcode}
+                onChange={(e) => { setPasscode(e.target.value); setAuthError(false); }}
+                className={`w-full bg-transparent border-b-2 px-0 py-3 text-center text-white text-lg tracking-[0.5em] focus:outline-none transition-colors ${authError ? 'border-red-500' : 'border-[#6D7175] focus:border-white'}`}
+              />
+            </div>
+            {authError && <p className="text-red-500 text-[10px] text-center uppercase tracking-widest">Access Denied</p>}
+            <button type="submit" className="w-full bg-white text-black py-4 text-xs font-bold uppercase tracking-widest hover:bg-neutral-200 transition-colors">
+              Decrypt & Enter
+            </button>
+          </form>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // 2. THE MOTHERBRAIN DASHBOARD (Only visible if authenticated)
+  // ------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-[#F1F2F4] text-[#1A1C1D] font-sans pb-24">
       {/* Top Nav */}
@@ -152,7 +194,7 @@ export default function PolarisAdmin() {
                   </label>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1.5 text-[#202223]">Hero Heading (e.g., BLACK FRIDAY)</label>
+                  <label className="block text-sm font-medium mb-1.5 text-[#202223]">Hero Heading</label>
                   <input value={settings.hero_heading} onChange={e => setSettings({...settings, hero_heading: e.target.value})} type="text" className="w-full border border-[#8C9196] rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-[#008060] outline-none" />
                 </div>
                 <div>
@@ -170,7 +212,7 @@ export default function PolarisAdmin() {
         )}
       </main>
 
-      {/* Add Product Modal (Inventory Tab) */}
+      {/* Add Product Modal */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1a1c1d]/40 backdrop-blur-sm">
